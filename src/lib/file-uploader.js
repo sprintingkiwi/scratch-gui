@@ -1,6 +1,7 @@
 import {BitmapAdapter} from 'scratch-svg-renderer';
 import log from './log.js';
 import randomizeSpritePosition from './randomize-sprite-position.js';
+import gifDecoder from './gif-decoder';
 
 /**
  * Extract the file name given a string of the form fileName + ext
@@ -111,6 +112,19 @@ const costumeUpload = function (fileData, fileType, costumeName, storage, handle
         assetType = storage.AssetType.ImageBitmap;
         break;
     }
+    case 'image/gif': {
+        let costumes = [];
+        const onFrame = (frameNumber, dataUrl) => {
+            costumeUpload(dataUrl, 'image/png', `${costumeName}-${frameNumber}`, storage, costumes_ => {
+                costumes = costumes.concat(costumes_);
+            });
+        };
+        const onDone = () => {
+            handleCostume(costumes);
+        };
+        gifDecoder(fileData, {onFrame, onDone});
+        return; // Abandon this load, do not try to load gif itself
+    }
     default:
         log.warn(`Encountered unexpected file type: ${fileType}`);
         return;
@@ -125,7 +139,7 @@ const costumeUpload = function (fileData, fileType, costumeName, storage, handle
             costumeFormat,
             dataBuffer
         );
-        handleCostume(vmCostume);
+        handleCostume([vmCostume]);
     };
 
     if (costumeFormat === storage.DataFormat.SVG) {
@@ -194,9 +208,10 @@ const spriteUpload = function (fileData, fileType, spriteName, storage, handleSp
     }
     case 'image/svg+xml':
     case 'image/png':
-    case 'image/jpeg': {
+    case 'image/jpeg':
+    case 'image/gif': {
         // Make a sprite from an image by making it a costume first
-        costumeUpload(fileData, fileType, `${spriteName}-${costumeName}`, storage, (vmCostume => {
+        costumeUpload(fileData, fileType, `${spriteName}-${costumeName}`, storage, (vmCostumes => {
             const newSprite = {
                 name: spriteName,
                 isStage: false,
@@ -210,7 +225,7 @@ const spriteUpload = function (fileData, fileType, spriteName, storage, handleSp
                 currentCostume: 0,
                 blocks: {},
                 variables: {},
-                costumes: [vmCostume],
+                costumes: vmCostumes,
                 sounds: [] // TODO are all of these necessary?
             };
             randomizeSpritePosition(newSprite);
